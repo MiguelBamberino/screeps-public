@@ -62,7 +62,8 @@ class SimpleAllies {
         if(this.logger)this.logger(level,category,msg,subject);
     }
     /**
-     * To call before any requests are made or responded to. Configures some required values and gets ally requests
+     * To call before any requests are made or responded to. Must be called every tick.
+     * Carries out memory & cache management. ~0.009 CPU/tick
      */
     tickStart() {
         this._parsed = false;
@@ -131,6 +132,7 @@ class SimpleAllies {
      * To call after requests have been made, to assign requests to the next ally
      */
     endRun() {
+        // TODO: I need to change this to work with new Memory model
         // Make sure we don't have too many segments open
         if (Object.keys(RawMemory.segments).length >= maxSegmentsOpen) {
             throw Error('Too many segments open: simpleAllies');
