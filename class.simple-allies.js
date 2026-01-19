@@ -27,27 +27,19 @@ class SimpleAllies {
      *
      * @param array allies list of player usernames
      * @param number segID the segment that you all share
+     * @param bool writeMyRequestsEveryTick -> If true, your segment is updated every tick.
+     *                                          Only set to true, if you update your requests every tick
      */
-    constructor(allies,segID) {
+    constructor(allies,segID,writeMyRequestsEveryTick=false) {
         this.allies = allies;
         this._parsed = false;
+        this._writeMyRequestsEveryTick = writeMyRequestsEveryTick;
         // This is the conventional segment used for team communication
         this.allySegmentID=segID;
 
         this.rawSegmentData={};
         this.allyRequests={};
 
-        // Reset the data of myRequests
-        this.myRequests = {
-            resource: [],
-            defense: [],
-            attack: [],
-            barrage: [],
-            player: [],
-            work: [],
-            funnel: [],
-            room: [],
-        };
         // get us set up, during the global reset
         RawMemory.setPublicSegments([segID]);
 
@@ -56,6 +48,13 @@ class SimpleAllies {
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Utility  methods - Handling segment data
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    /**
+     * Allow you to inject your own bots logger
+     * Pass in a logger function that follows fn(level, category, message, subject)
+     * This function will receive log messages from this class
+     * level=INFO|WARNING|ERROR|VERBOSE
+     * @param fn
+     */
     setLogger(fn){
         this.logger=fn;
     }
@@ -66,9 +65,27 @@ class SimpleAllies {
      * To call before any requests are made or responded to. Must be called every tick.
      * Carries out memory & cache management. ~0.009 CPU/tick
      */
-    tickStart() {
+    initRun() {
         this._parsed = false;
+
+        // Reset the HEAP data of myRequests, ready for the bot to add new requests this tick
+        this.myRequests = {};
+        // to save CPU, we won't write out to the segment, unless forced
+        this._updateMySegment = this._writeMyRequestsEveryTick;
+
         return this._readAllySegment();
+    }
+    /**
+     * To call after requests have been made, to assign requests to the next ally
+     */
+    endRun() {
+        if(!this._updateMySegment)return;
+        // Make sure we don't have too many segments open
+        if (Object.keys(RawMemory.segments).length >= maxSegmentsOpen) {
+            throw Error('Too many segments open: simpleAllies');
+        }
+        RawMemory.segments[this.allySegmentID] = JSON.stringify({requests: this.myRequests});
+
     }
 
     _parseRawData(){
@@ -129,21 +146,7 @@ class SimpleAllies {
 
     }
 
-    /**
-     * To call after requests have been made, to assign requests to the next ally
-     */
-    endRun() {
-        // TODO: I need to change this to work with new Memory model
-        // Make sure we don't have too many segments open
-        if (Object.keys(RawMemory.segments).length >= maxSegmentsOpen) {
-            throw Error('Too many segments open: simpleAllies');
-        }
-        const newSegmentData = {
-            requests: this.myRequests
-        };
-        RawMemory.segments[this.allySegmentID] = JSON.stringify(newSegmentData);
 
-    }
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Read Request methods - Reading requests from Allies
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -178,7 +181,7 @@ class SimpleAllies {
      * @param {boolean} [args.terminal] - If the bot has no terminal, allies should instead haul the resources to us
      */
     requestResource(args) {
-        this.myRequests.resource.push(args);
+        this._setRequestByType("resource",args);
     }
 
     /**
@@ -188,7 +191,7 @@ class SimpleAllies {
      * @param {string} args.roomName
      */
     requestDefense(args) {
-        this.myRequests.defense.push(args);
+        this._setRequestByType("defense",args);
     }
 
     /**
@@ -198,7 +201,7 @@ class SimpleAllies {
      * @param {string} args.roomName
      */
     requestAttack(args) {
-        this.myRequests.attack.push(args);
+        this._setRequestByType("attack",args);
     }
 
     /**
@@ -209,23 +212,39 @@ class SimpleAllies {
      * @param {number} args.startTick - when to start barrage (Based on Game.time)
      * @param {number} args.interval - tick spacing, between nukes
      * @param {number} args.maxNukes - how many nukes to have active in the room at one time
-     * @param {number} args.modVal - divisor for Game.time modulus operation
-     * @param {object} args.playerLaunchSlots - a map of username->tick-slot, where Game.time%25==slot
-     *                                          e.g. { bob:3, emma:4, fred:5 },
-     *                                          emma only fires when Game.time%25==4
-     *                                          fred only fires when Game.time%25==5
+     * @param {array} args.invitedPlayers - array of string usernames, who you invite to nuke
+     *                                 this defaults to all allies, but allows you to prevalidate
+     *                                 invite a smaller list of player
+     *
+     * ---- The following is added after --------------
+     * To ensure no player launches a nuke in the same tick, each player is assigned a launch window
+     * which repeats every nth tick. So if Bob, Emma & Fred want to barrage Dave, they take it in turns.
+     * This leans of Game.time%modValue==players-slot
+     *   if there are 3 allies, modValue=3, with slots 0,1,2
+     *   if(Game.time%3===0) Bob can Fire
+     *   if(Game.time%3===1) Emma can Fire
+     *   if(Game.time%3===2) Fred can Fire
+     *
+     * modVal & launchSlots are appended, for you to know when you can launch your nuke.
+     *
+     * @extra {number} request.modVal - divisor for Game.time modulus operation e.g. Game.time%modVal==launchSlot
+     * @extra {object} request.launchSlots - a map of username->tick-slot, where Game.time%modVal==launchSlot
+     *
      */
     requestBarrage(args) {
 
-        if(typeof args.playerLaunchSlots === 'undefined'){
-            args.playerLaunchSlots={};
-            for(let id in this.allies){
-                args.playerLaunchSlots[ this.allies[id] ]=id;
-            }
-        }
-        args.modVal = Object.keys(args.playerLaunchSlots).length;
+        let invitedPlayers = args.invitedPlayers?args.invitedPlayers:this.allies;
+        // dont push in this data, we're going to restructure it
+        delete args.invitedPlayers;
 
-        this.myRequests.barrage.push(args);
+        // build the nuke plan, so all players know when they should launching
+        args.launchSlots={};
+        for(let id in invitedPlayers){
+            args.launchSlots[ invitedPlayers[id] ]=id;
+        }
+        args.modVal = Object.keys(args.launchSlots).length;
+
+        this._setRequestByType("barrage",args);
     }
 
 
@@ -236,7 +255,7 @@ class SimpleAllies {
      * @param {number} args.lastAttackedBy - The last time this player has attacked you
      */
     requestPlayer(args) {
-        this.myRequests.player.push(args);
+        this._setRequestByType("player",args);
     }
 
     /**
@@ -247,7 +266,7 @@ class SimpleAllies {
      * @param {'build' | 'repair'} args.workType
      */
     requestWork(args) {
-        this.myRequests.work.push(args);
+        this._setRequestByType("work",args);
     }
 
     /**
@@ -258,7 +277,7 @@ class SimpleAllies {
      * @param {string} [args.roomName] - Room to which energy should be sent. If undefined resources can be sent to any of requesting player's rooms.
      */
     requestFunnel(args) {
-        this.myRequests.funnel.push(args);
+        this._setRequestByType("funnel",args);
     }
 
     /**
@@ -270,7 +289,7 @@ class SimpleAllies {
      * @param {Object.<MineralConstant, number>} [args.mineralNodes] - The number of mineral nodes the bot has access to, probably used to inform expansion
      */
     requestEcon(args) {
-        this.myRequests.econ = args;
+        this._setRequestByType("econ",args);
     }
 
     /**
@@ -286,7 +305,12 @@ class SimpleAllies {
      * @param {boolean} args.terminal - does scouted room have terminal built
      */
     requestRoom(args) {
-        this.myRequests.room.push(args);
+        this._setRequestByType("room",args);
+    }
+    _setRequestByType(type,args){
+        this._updateMySegment=true;// make sure we push updates to the segment memory
+        if(this.myRequests[type]===undefined)this.myRequests[type]=[];
+        this.myRequests[type].push(args);
     }
 }
 
