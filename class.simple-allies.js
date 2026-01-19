@@ -19,6 +19,7 @@ const EFunnelGoalType = {
  * - CPU improvements, by on storing raw string data and parsing JSON on demand.
  * - added requestBarrage(), working with SneakyPolarBear (https://github.com/ztomlord)
  * - Added read wrappers for making it easier for player bots to access/filter what they want to read
+ * - added log support, for player bots to hook their logger in. Instead of console.log()
  */
 class SimpleAllies {
 
