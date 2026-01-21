@@ -25,13 +25,15 @@ class SimpleAllies {
 
     /**
      *
-     * @param array allies list of player usernames
-     * @param number segID the segment that you all share
+     * @param array allies - list of player usernames
+     * @param number segID - the segment that you all share
+     * @param string myUsername - your username
      * @param bool writeMyRequestsEveryTick -> If true, your segment is updated every tick.
      *                                          Only set to true, if you update your requests every tick
      */
-    constructor(allies,segID,writeMyRequestsEveryTick=false) {
+    constructor(allies,segID,myUsername,writeMyRequestsEveryTick=false) {
         this.allies = allies;
+        this.myUsername = myUsername;
         this._parsed = false;
         this._writeMyRequestsEveryTick = writeMyRequestsEveryTick;
         // This is the conventional segment used for team communication
@@ -150,10 +152,28 @@ class SimpleAllies {
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Read Request methods - Reading requests from Allies
     /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Get an array, containing all Users' Funnel requests. requests[i].username
     getFunnelRequests() {return this._getRequestsByType('funnel');}
     getResourceRequests() {return this._getRequestsByType('resource');}
     getAttackRequests() {return this._getRequestsByType('attack');}
     getBarrageRequests() {return this._getRequestsByType('barrage');}
+
+    // get the full object data, posted by all users. Keyed by user
+    // data is raw, and has no clean-up of bad data
+    getRawRequests(){
+        this._parseRawData();
+        return this.allyRequests;
+    }
+    // get the full object data, posted by a given user
+    // data is raw, and has no clean-up of bad data
+    getRequestsByUser(username){
+        this._parseRawData();
+        if(!this.allyRequests[username])return undefined;
+        return this.allyRequests[username].requests;
+    }
+
+    // internal function, not intended for public use
     _getRequestsByType(type){
         this._parseRawData();
         let requests = [];
@@ -167,10 +187,46 @@ class SimpleAllies {
         }
         return requests;
     }
+    /////////// CUSTOM READ methods - applies extended logic over the raw/base data ////////////////////////////////////
+    /**
+     * Get all the open nuke requests, where you can/should fire THIS tick
+     *
+     * Designed to work with requestBarrage() and allocated player launchSlots. It ensures no player launches on the same tick.
+     * For any barrages; that has started, and you're invited, and this tick is your launch slot, then the request is included
+     *
+     * @returns {*[]}
+     */
+    getOpenBarrageSlots(){
 
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        if(this.myUsername===undefined)return [];
+
+        this._parseRawData();
+        let requests = [];
+
+        for(let username in this.allyRequests){
+
+            if(typeof this.allyRequests[username].requests!=='object')continue;
+            if(typeof this.allyRequests[username].requests.barrage!=='object')continue;
+
+            for(let req of this.allyRequests[username].requests.barrage){
+                req.username=username;
+                if(req.modVal===undefined)continue; // request was not set correctly. ignore
+                if(req.launchSlots===undefined)continue; // request was not set correctly. ignore
+                if(req.launchSlots[this.myUsername]===undefined)continue; // you're not invited to the nuke part :'(
+                if(req.startTick===undefined)req.startTick=0; // not-set means fire asap
+                if(Game.time<req.startTick)continue;// barrage not starting yet
+
+                if( Game.time % req.modVal === req.launchSlots[this.myUsername] ){
+                    requests.push(req);
+                }
+            }
+        }
+        return requests;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Push Request methods - Publishing to Allies
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /**
      * Request resource
      * @param {Object} args - a request object
@@ -209,9 +265,9 @@ class SimpleAllies {
      * @param {Object} args - a request object
      * @param {number} args.priority - 0-1 where 1 is highest consideration
      * @param {string} args.roomName - where to target
-     * @param {number} args.startTick - when to start barrage (Based on Game.time)
-     * @param {number} args.interval - tick spacing, between nukes
-     * @param {number} args.maxNukes - how many nukes to have active in the room at one time
+     * @param {number} args.startTick - when to start barrage (Game.time) Default: current-game-time
+     * @param {number} args.interval - tick spacing, between nukes Default:500
+     * @param {number} args.maxNukes - how many nukes to have active in the room at one time. Default:999 (~JSON.Infinity)
      * @param {array} args.invitedPlayers - array of string usernames, who you invite to nuke
      *                                 this defaults to all allies, but allows you to prevalidate
      *                                 invite a smaller list of player
@@ -225,13 +281,17 @@ class SimpleAllies {
      *   if(Game.time%3===1) Emma can Fire
      *   if(Game.time%3===2) Fred can Fire
      *
-     * modVal & launchSlots are appended, for you to know when you can launch your nuke.
+     * The values for modVal & launchSlots are injected; not set by you. They tell players when they launch nukes.
      *
      * @extra {number} request.modVal - divisor for Game.time modulus operation e.g. Game.time%modVal==launchSlot
      * @extra {object} request.launchSlots - a map of username->tick-slot, where Game.time%modVal==launchSlot
      *
      */
     requestBarrage(args) {
+
+        if(args.startTick===undefined)args.startTick=Game.time;
+        if(args.interval===undefined)args.interval=500;
+        if(args.maxNukes===undefined)args.maxNukes=999;
 
         let invitedPlayers = args.invitedPlayers?args.invitedPlayers:this.allies;
         // dont push in this data, we're going to restructure it
