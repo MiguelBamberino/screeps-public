@@ -15,9 +15,10 @@ const EFunnelGoalType = {
  * https://github.com/screepers/simpleAllies/blob/main/src/js/simpleAllies.js
  *
  * I've added:
- * - local stashing of all aly data, so that you can access Ally requests when you can't see their segment
+ * - local stashing of all ally data, so that you can access Ally requests when you can't see their segment
  * - CPU improvements, by on storing raw string data and parsing JSON on demand.
- * - added requestBarrage(), working with SneakyPolarBear (https://github.com/ztomlord)
+ * - added requestBarrage(), working with SneakyPolarBear & Kalgen
+ * - added player synced nuke launches, using requestBarrage() + getOpenBarrageJobs()
  * - Added read wrappers for making it easier for player bots to access/filter what they want to read
  * - added log support, for player bots to hook their logger in. Instead of console.log()
  */
@@ -189,19 +190,28 @@ class SimpleAllies {
     }
     /////////// CUSTOM READ methods - applies extended logic over the raw/base data ////////////////////////////////////
     /**
-     * Get all the open nuke requests, where you can/should fire THIS tick
+     * Get all the open nuke requests, where you can/should be acting this tick.
+     *
+     *  The request will have come from requestBarrage()
+     *
+     * An action will either be "observe"/"decide-launch"
+     * WHEN req.action===observe you must call observeRoom(req.roomName), so you have vision next tick
+     * WHEN req.action===decide-launch, you NEED vision and should fire a nuke if youngestNuke is older than req.interval
+     *
+     * if youngestNuke is recent, it is up to your bot to sleep for X ticks, based on req.interval
      *
      * Designed to work with requestBarrage() and allocated player launchSlots. It ensures no player launches on the same tick.
-     * For any barrages; that has started, and you're invited, and this tick is your launch slot, then the request is included
+     * For any barrages that have started, and you're invited, then you'll get any task(s) for THIS tick, returned
      *
-     * @returns {*[]}
+     * @returns {*} roomName keyed object of jobs
+     *      e.g. {W2N3:{action:'observe',roomName:'W2N3',intervale:500...}...}
      */
-    getOpenBarrageSlots(){
+    getOpenBarrageJobs(){
 
         if(this.myUsername===undefined)return [];
 
         this._parseRawData();
-        let requests = [];
+        let barrageJobs = {};
 
         for(let username in this.allyRequests){
 
@@ -209,19 +219,27 @@ class SimpleAllies {
             if(typeof this.allyRequests[username].requests.barrage!=='object')continue;
 
             for(let req of this.allyRequests[username].requests.barrage){
-                req.username=username;
+                req.username=username;// set set who asked for the nuke
                 if(req.modVal===undefined)continue; // request was not set correctly. ignore
                 if(req.launchSlots===undefined)continue; // request was not set correctly. ignore
                 if(req.launchSlots[this.myUsername]===undefined)continue; // you're not invited to the nuke part :'(
                 if(req.startTick===undefined)req.startTick=0; // not-set means fire asap
                 if(Game.time<req.startTick)continue;// barrage not starting yet
+                if(barrageJobs[req.roomName])continue;// two players requesting nukes on same room. Ignore later requests
 
-                if( Game.time % req.modVal === req.launchSlots[this.myUsername] ){
-                    requests.push(req);
+                // split task into tick 1 request-vision, tick 2 run-launch-checks
+                // I could have used observeTick=slot[player]-1, but that messier
+                if( (Game.time+1) % req.modVal === req.launchSlots[this.myUsername] ){
+                    req.action='decide-launch';
+                    barrageJobs[req.roomName]=req;
+                }
+                else if( Game.time % req.modVal === req.launchSlots[this.myUsername] ){
+                    req.action='observe';
+                    barrageJobs[req.roomName]=req;
                 }
             }
         }
-        return requests;
+        return barrageJobs;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
