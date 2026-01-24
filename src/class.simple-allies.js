@@ -162,7 +162,7 @@ class SimpleAllies {
 
     // get the full object data, posted by all users. Keyed by user
     // data is raw, and has no clean-up of bad data
-    getRawRequests(){
+    getAllRequests(){
         this._parseRawData();
         return this.allyRequests;
     }
@@ -180,7 +180,10 @@ class SimpleAllies {
         let requests = [];
         for(let username in this.allyRequests){
             if(typeof this.allyRequests[username].requests!=='object')continue;
+            if(this.allyRequests[username].requests===null)continue;
+
             if(typeof this.allyRequests[username].requests[type]!=='object')continue;
+            if(this.allyRequests[username].requests[type]===null)continue;
             for(let req of this.allyRequests[username].requests[type]){
                 req.username=username;
                 requests.push(req);

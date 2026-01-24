@@ -1,0 +1,25 @@
+{
+  "name": "maddokmike-screeps-public",
+  "version": "0.1.0",
+  "description": "code I share with screeps community",
+  "main": "main.js",
+  "scripts": {
+    "test": "jest",
+    "test:debug": "node --inspect-brk ./node_modules/.bin/jest --runInBand"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MiguelBamberino/screeps.git"
+  },
+  "author": "Mike  Bamber <mikebamber@live.com>",
+  "bugs": {
+    "url": "https://github.com/MiguelBamberino/screeps/issues"
+  },
+  "homepage": "https://github.com/MiguelBamberino/screeps#readme",
+  "devDependencies": {
+    "@screeps/common": "github:screeps/common",
+    "jest": "^26.0.0"
+  },
+  "dependencies": {
+  }
+}
