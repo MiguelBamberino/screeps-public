@@ -23,10 +23,10 @@ AllyChat.initRun();
 
                   let youngestNuke = findYoungestNuke() //player code
 
-                 if( (NUKE_LAND_TIME - youngestNuke.timeToLand) > req.interval ){
+                 if( !youngestNuke || (NUKE_LAND_TIME - youngestNuke.timeToLand) > req.interval ){
 
                      fireNukeAt(roomName,"max-damage"); //player code
-                     
+
 
                      console.log("FIRE!!! on ",roomName," for barrage request from ",req.username);
 
