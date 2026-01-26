@@ -430,14 +430,499 @@ describe('simple-allies.3 > getAllRequests()',()=> {
 
 describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
 
-    it.todo('simple-allies.4.1 > No barrages set. Expect: {} ');
-    it.todo('simple-allies.4.2 > barrages set, then removed. Expect: {}');
-    it.todo('simple-allies.4.3 > 1 active Barrage, player not invited. Expect: {} ');
-    it.todo('simple-allies.4.4 > 1 active Barrage, not player turn to act. Expect: {}');
-    it.todo('simple-allies.4.5 > 1 active Barrage, player turn to observe. Expect: request');
-    it.todo('simple-allies.4.6 > 1 active Barrage, player turn to launch. Expect: request');
-    it.todo('simple-allies.4.7 > 2 active Barrage, player turn to act on one. Expect: 1 request');
-    it.todo('simple-allies.4.8 > 2 active Barrage, same room, player turn on 2nd, not 1st. Expect: NO request. We need to completely ignore duplicate requests.');
-    it.todo('simple-allies.4.9 > 2 active Barrage, same room, player turn on both. Expect: 1st. Ignore 2nd (duplicate).');
-    it.todo('simple-allies.4.9 > 2 active Barrage, same room, player turn on both. Expect: 1st. Ignore 2nd (duplicate).');
+    it('simple-allies.4.1 > No barrages set. Expect: {} ',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // first tick, we're just assign the segment
+        AllyChat.initRun();
+        // Game tick over
+        Game.time++;
+        RawMemory.foreignSegment={username:'AllyA',data:'{ "requests":{"barrage":[]} }'};
+        // next tick we can READ allyA and set pointer to allyB
+        AllyChat.initRun();
+        // Game tick over
+        Game.time++;
+        RawMemory.foreignSegment={username:'AllyB',data:'{ "requests": { "defense": [{"roomName":"W3N3"}] } }'};
+        // next tick we can READ allyB and set pointer to allyC
+        AllyChat.initRun();
+        expect(AllyChat.getOpenBarrageJobs()).toEqual({});
+
+    });
+    it('simple-allies.4.2 > barrages set, then removed. Expect: {}',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick=1, we're just assign the segment
+        AllyChat.initRun();
+
+        // AllyA has set a barrage request. team: AllyA, AllyB & logged in player(MyUserName)
+        // modValue=3 for 3 members.
+        // IF(T%MV==LS) THEN observer ELSE IF(T%MV==LS-1) THEN FIRE
+        // MyUserName observes on T%3===1, fires T%3===2
+        /* Examples:
+            1%3=1
+            2%3=2
+            3%3=0
+            4%3=1
+            5%3=2
+            6%3=0
+         */
+
+        // Tick=2 we can READ allyA
+        Game.time++;
+        let data = JSON.stringify({
+                            requests:{
+                                barrage:[
+                                    {roomName:"W2N3",startTick:1,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:5 }
+                                ]}
+                        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick=2 2%3=2, MyUserName:2, so we can launch
+        expect(AllyChat.getOpenBarrageJobs()).toEqual({
+            W2N3:{action:'decide-launch',roomName:"W2N3",startTick:1,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:5,username:'AllyA' }
+        });
+
+        // Game tick over
+        Game.time++;
+        RawMemory.foreignSegment={username:'AllyB',data:'{ "requests": { "defense": [{"roomName":"W3N3"}] } }'};
+        // Tick=3, we can READ allyB and set pointer to allyA
+        AllyChat.initRun();
+        // Game tick over
+        Game.time++;
+        RawMemory.foreignSegment={username:'AllyA',data:'{ "requests":{"barrage":[]} }'};
+        // next tick we can READ allyA and set pointer to allyB
+        AllyChat.initRun();
+
+
+        expect(AllyChat.getOpenBarrageJobs()).toEqual({});
+
+
+    });
+    it('simple-allies.4.3 > 1 active Barrage, player not invited. Expect: {} ',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W2N3",startTick:1,launchSlots:{AllyA:0,AllyB:1},modVal:2,interval:250, maxNukes:5 }
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        /// Now lets cycle through 3 ticks (full-team-size) to ensure the active player is not part of nuke-team
+        // Tick 3 - Game-tick over
+        Game.time++;
+        expect(AllyChat.getOpenBarrageJobs()).toEqual({});
+        // Tick 4 - Game-tick over
+        Game.time++;
+        expect(AllyChat.getOpenBarrageJobs()).toEqual({});
+        // Tick 5 - Game-tick over
+        Game.time++;
+        expect(AllyChat.getOpenBarrageJobs()).toEqual({});
+
+    });
+    it('simple-allies.4.4 > 1 active Barrage, player turn to act. Expect: {}',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W2N3",startTick:1,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:5 }
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick 3 - Player3 (MyUserName) is not active (3%3=0); AllyA firing, AllyB observing
+        Game.time=3;
+        expect(AllyChat.getOpenBarrageJobs()).toEqual({});
+
+    });
+    it('simple-allies.4.5 > 1 active Barrage, player turn to observe. Expect: request',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W2N3",startTick:1,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:5 }
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick 4 - Player3 (MyUserName) should observer 4%3==1.
+        Game.time=4;
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W2N3']).toBeDefined();
+        expect(jobs['W2N3'].action).toBe('observe');
+    });
+    it('simple-allies.4.6 > 1 active Barrage, player turn to launch. Expect: request',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W2N3",startTick:1,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:5 }
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick 5 - Player3 (MyUserName) should fire 5%3==1.
+        Game.time=5;
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W2N3']).toBeDefined();
+        expect(jobs['W2N3'].action).toBe('decide-launch');
+    });
+    it('simple-allies.4.7 > 2 active Barrage, player turn to act on one, not the other. Expect: 1 request',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W1N3",startTick:1,launchSlots:{AllyA:2,AllyB:1,MyUserName:0},modVal:3,interval:250, maxNukes:5 },
+                    {roomName:"W2N3",startTick:1,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:5 },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick 6 - Player3 (MyUserName) should be silent on W2N3 (6%3=0) and fire on W1N3 (6%3==0)
+        Game.time=6;
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W1N3']).toBeDefined();
+        expect(jobs['W2N3']).toBeUndefined();
+        expect(jobs['W1N3'].action).toBe('decide-launch');
+    });
+    it('simple-allies.4.8 > 2 active Barrage, same room, player turn on 2nd, not 1st. Expect: NO request. Completely ignore duplicate nuke requests.',()=>{
+        // Kalgen's test case
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W1N3",startTick:1,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:5 },
+                    {roomName:"W1N3",startTick:1,launchSlots:{AllyA:2,AllyB:1,MyUserName:0},modVal:3,interval:250, maxNukes:5 },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick 6 - Player3 (MyUserName) reqs: 1st (6%3!=2) and 2nd (6%3==0)
+        Game.time=6;
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W1N3']).toBeUndefined();// we should not activate on 2nd request, as it was accepted in error
+    });
+    it('simple-allies.4.9 > 2 active Barrage, same room, player turn on both. Expect: 1st. Ignore 2nd (duplicate).',()=>{
+        // Kalgen's test case
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W1N3",startTick:1,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:2 },
+                    {roomName:"W1N3",startTick:1,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:5 },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick 5 - Player3 (MyUserName) reqs: 1st (5%3==2)
+        Game.time=5;
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W1N3']).toBeDefined();
+        expect(jobs['W1N3'].maxNukes).toBe(2);// we should activate on 1st request, as it was accepted in error
+    });
+    it('simple-allies.4.10 > 1 active Barrage, Player with LS=0. Expect: Player gets observer-slot=slots.length.',()=>{
+            createFake_Game();
+            createFake_RawMemory();
+            let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+            // Tick 1
+            AllyChat.initRun();
+            // Tick 2 - Game-tick over
+            Game.time++;
+            let data = JSON.stringify({
+                requests:{
+                    barrage:[
+                        {roomName:"W1N3",startTick:1,launchSlots:{MyUserName:0,AllyA:1,AllyB:2},modVal:3,interval:250, maxNukes:2 },
+                    ]}
+            });
+            RawMemory.foreignSegment={username:'AllyA',data:data};
+            AllyChat.initRun();
+            // Tick 5 - Player3 (MyUserName) observes on (5%3==2), so AllyBs fire slot
+            Game.time=5;
+            let jobs = AllyChat.getOpenBarrageJobs();
+            expect(jobs['W1N3']).toBeDefined();
+            expect(jobs['W1N3'].action).toBe("observe");
+    });
+    it('simple-allies.4.11 > Complicated logic stress test. Expect: Player to only get a row on correct turn.',()=>{
+        // ergh, this ones going to be a PITA
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB','AllyC','AllyD'],90,'MyUserName');
+        // Tick 1 - player loop
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W1N3",launchSlots:{AllyA:0,AllyB:1,MyUserName:2},interval:250, maxNukes:10 },
+                    {roomName:"W4E3",launchSlots:{AllyC:0,AllyB:1},interval:250, maxNukes:10 },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        // Tick 2 - player loop
+        AllyChat.initRun();
+        // Tick 3 - Game-tick over
+        Game.time++;
+        data = JSON.stringify({
+            requests:{
+                barrage:[
+                    // a lovely out of order big party
+                    {roomName:"W2N2",launchSlots:{AllyA:0,MyUserName:1,AllyC:2,AllyB:3,AllyD:4},interval:5500,maxNukes:50 },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyB',data:data};
+        // Tick 3 - player loop
+        AllyChat.initRun();
+        // Tick 4 - Game-tick over
+        Game.time++;
+        data = JSON.stringify({
+            requests:{
+                defense:[
+                    {roomName:"E1N3" },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyC',data:data};
+        // Tick 4 - player loop
+        AllyChat.initRun();
+
+
+        // fast-forward ticks for nuke jobs
+        Game.time=4;
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W1N3']).toBeDefined();
+        expect(jobs['W1N3'].action).toBe("observe");
+        expect(jobs['W4E3']).toBeUndefined(); // not in the party
+        expect(jobs['W2N2']).toBeUndefined(); // not your turn; Ally D launch & A observe
+
+        Game.time=5;
+        jobs = AllyChat.getOpenBarrageJobs();
+
+        expect(jobs['W1N3']).toBeDefined();
+        expect(jobs['W1N3'].action).toBe("decide-launch");
+
+        expect(jobs['W4E3']).toBeUndefined(); // not in the party
+        expect(jobs['W2N2']).toBeDefined();
+        expect(jobs['W2N2'].action).toBe("observe"); // 5%5==0
+
+        Game.time=6;
+        jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W1N3']).toBeUndefined();  // not your turn; Ally A & B
+        expect(jobs['W4E3']).toBeUndefined(); // not in the party
+        expect(jobs['W2N2']).toBeDefined();
+        expect(jobs['W2N2'].action).toBe("decide-launch"); // 6%5==1
+
+
+    });
+    it('simple-allies.4.12 > Barrages with startTick >= Game.time Expect: request is ignored.',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W1N3",startTick:4,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:2 },
+                    {roomName:"W2N3",startTick:5,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:5 },
+                    {roomName:"W3N3",startTick:6,launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:5 },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick 5 - Player3 (MyUserName) fires (5%3==2)
+        Game.time=5;
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W1N3']).toBeDefined();
+        expect(jobs['W2N3']).toBeDefined();
+        expect(jobs['W3N3']).toBeUndefined();
+    });
+    it('simple-allies.4.13 > Barrages with !startTick,  !maxNukes, !interval, !modVal, !launchSlots Expect: Assumed defaults.',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W1N3", launchSlots:{AllyA:0,AllyB:1,MyUserName:2} },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick 5 - Player3 (MyUserName) fires on (5%3==0)
+        Game.time=5;
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W1N3']).toBeDefined();
+        expect(jobs['W1N3'].startTick).toBe(1);
+        expect(jobs['W1N3'].maxNukes).toBe(999);
+        expect(jobs['W1N3'].interval).toBe(500);
+        expect(jobs['W1N3'].modVal).toBe(3);
+        expect(jobs['W1N3'].action).toBe('decide-launch');
+    });
+    it('simple-allies.4.14 > Barrages with !launchSlots Expect: request is ignored. launchSlots CANNOT be rebuilt on client-side',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W1N3",interval:250, maxNukes:4 },
+                    {roomName:"W2N3",launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:2 },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick 5 - Player3 (MyUserName) fires (5%3==2)
+        Game.time=5;
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect( Object.keys(jobs).length ).toBe(1);
+        expect(jobs['W2N3']).toBeDefined();
+        expect(jobs['W2N3'].maxNukes).toBe(2);
+    });
+    it('simple-allies.4.15 > Barrages with !roomName Expect: request is ignored...obv',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W1N3",launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:2 },
+                    {launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:3,interval:250, maxNukes:3 },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick 5 - Player3 (MyUserName) fires (5%3==2)
+        Game.time=5;
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect( Object.keys(jobs).length ).toBe(1);
+        expect(jobs['W1N3']).toBeDefined();
+        expect(jobs['W1N3'].maxNukes).toBe(2);
+    });
+
+    it('simple-allies.4.16 > Barrages with modVal!=launchSlots.length Expect: Ignored and launchSlots.length is used',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W1N3",launchSlots:{AllyA:0,AllyB:1,MyUserName:2},modVal:5,interval:250, maxNukes:2 },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        AllyChat.initRun();
+        // Tick 5 - Player3 (MyUserName) fires (5%3==2), ignoring modVal:5 (5%5==0)
+        // if the code used modVal 5, then we'd get no request of tick 5
+        Game.time=5;
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect( Object.keys(jobs).length ).toBe(1);
+        expect(jobs['W1N3']).toBeDefined();
+        expect(jobs['W1N3'].action).toBe("decide-launch");
+        expect(jobs['W1N3'].maxNukes).toBe(2);
+    });
+    it('simple-allies.4.17 > You request your own barrage,  Expect: You must be included in the launch slots and nuke jobs',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W1N3",launchSlots:{AllyA:2,AllyB:1,MyUserName:0},interval:250, maxNukes:2 },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        // Tick 2 - Player loop
+        AllyChat.initRun();
+        AllyChat.requestBarrage({roomName:'W2N1'})
+        AllyChat.endRun();
+
+        // SOME time passes
+        Game.time++;  // Tick 3
+        AllyChat.initRun();
+        AllyChat.endRun();
+        Game.time++;  // Tick 4
+        AllyChat.initRun();
+        AllyChat.endRun();
+        Game.time++;  // Tick 5
+
+        // Tick 5 - Player3 (MyUserName) should have been appended to the nuke slots at slot=2
+        // Player3 fires (5%3==2) on W2N1 and observes (4%3==1) on W2N1
+        // if the code used modVal 5, then we'd get no request of tick 5
+
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W1N3']).toBeDefined();
+        expect(jobs['W1N3'].action).toBe("observe"); // (5%3==2) observe, (6%3==0) fire
+        expect(jobs['W1N3'].maxNukes).toBe(2);
+
+        expect(jobs['W2N1']).toBeDefined();
+        expect(jobs['W2N1'].launchSlots).toEqual({AllyA:0,AllyB:1,MyUserName:2});
+        expect(jobs['W2N1'].action).toBe("decide-launch"); // (5%3==2) fire, (4%3==1) observe
+        expect(jobs['W2N1'].maxNukes).toBe(999);
+    });
 });
