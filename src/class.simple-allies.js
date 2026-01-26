@@ -50,6 +50,7 @@ class SimpleAllies {
         this.rawSegmentData={};
         this.allyRequests={};
         this.myRequests = {};
+        this.nukeSleeps={};
 
         // get us set up, during the global reset
         RawMemory.setPublicSegments([segID]);
@@ -258,6 +259,19 @@ class SimpleAllies {
 
         return barrageJobs;
     }
+
+    /**
+     * provides a built-in tracker, for sleeping a request for X ticks, based on the request.interval.
+     * When sleeping, it is hidden from returning out of getOpenBarrageJobs()
+     * When the sleep expires, it will re-appear in calls to getOpenBarrageJobs()
+     * This is just a helpful, built-in CPU saver, so you can avoid analysis CP
+     * @param req
+     */
+    sleepBarrageRequest(req){
+
+        this.nukeSleeps[ req.roomName ] = Game.time + req.interval;
+
+    }
     _processBarrageRequest(req,username){
         if(req.roomName===undefined)return; // obv, we need a target
         if(req.launchSlots===undefined)return; // slots cant be rebuilt, requires single author of the order
@@ -269,6 +283,7 @@ class SimpleAllies {
 
         if(req.launchSlots[this.myUsername]===undefined)return; // you're not invited to the nuke part :'(
         if(Game.time<req.startTick)return;// barrage not starting yet
+        if(this.nukeSleeps[req.roomName] && Game.time < this.nukeSleeps[req.roomName])return;// barrage not starting yet
 
         // two players requesting nukes on the same room. Ignore later requests
         if(this.dupCheck[req.roomName])return;

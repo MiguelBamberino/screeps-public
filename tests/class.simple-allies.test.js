@@ -925,4 +925,66 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(jobs['W2N1'].action).toBe("decide-launch"); // (5%3==2) fire, (4%3==1) observe
         expect(jobs['W2N1'].maxNukes).toBe(999);
     });
+
+    it('simple-allies.4.18 > using sleepBarrageRequest(),  Expect: The job to stay dormant until its time',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
+        // Tick 1
+        AllyChat.initRun();
+        // Tick 2 - Game-tick over
+        Game.time++;
+        let data = JSON.stringify({
+            requests:{
+                barrage:[
+                    {roomName:"W1N3",launchSlots:{AllyA:2,AllyB:1,MyUserName:0},interval:250, maxNukes:2 },
+                ]}
+        });
+        RawMemory.foreignSegment={username:'AllyA',data:data};
+        // Tick 2 - Player loop
+        AllyChat.initRun();
+        AllyChat.requestBarrage({roomName:'W2N1'})
+        AllyChat.endRun();
+
+        // SOME time passes
+        Game.time++;  // Tick 3
+        AllyChat.initRun();
+        AllyChat.endRun();
+        Game.time++;  // Tick 4
+        AllyChat.initRun();
+        AllyChat.endRun();
+        Game.time++;  // Tick 5
+
+        // Tick 5 - Player3 (MyUserName) should have been appended to the nuke slots at slot=2
+        // Player3 fires (5%3==2) on W2N1 and observes (4%3==1) on W2N1
+        // if the code used modVal 5, then we'd get no request of tick 5
+
+        let jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W1N3']).toBeDefined();
+        expect(jobs['W1N3'].action).toBe("observe"); // (5%3==2) observe, (6%3==0) fire
+        expect(jobs['W1N3'].maxNukes).toBe(2);
+        AllyChat.sleepBarrageRequest(jobs['W1N3']);
+
+        expect(jobs['W2N1']).toBeDefined();
+        expect(jobs['W2N1'].launchSlots).toEqual({AllyA:0,AllyB:1,MyUserName:2});
+        expect(jobs['W2N1'].action).toBe("decide-launch"); // (5%3==2) fire, (4%3==1) observe
+        expect(jobs['W2N1'].maxNukes).toBe(999);
+        AllyChat.sleepBarrageRequest(jobs['W2N1']);
+        for(let t=5; t<255; t++){
+            Game.time = t;
+            jobs = AllyChat.getOpenBarrageJobs();
+            expect(jobs).toEqual({});
+        }
+        Game.time = 255;// job W1N3 wakes up
+        jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W1N3']).toBeDefined(); // 255%3==0, MyUserName fires on 0, observes on 2
+        expect(jobs['W1N3'].action).toBe("decide-launch");
+        expect(jobs['W2N1']).toBeUndefined(); // 255%3==0, MyUserName fires on 2, observes on 1 BUT still 250t of sleep
+
+        Game.time = 251;
+        jobs = AllyChat.getOpenBarrageJobs();
+        expect(jobs['W1N3']).toBeUndefined(); // 256%3==1, MyUserName fires on 0, observes on 2
+
+        expect(jobs['W2N1']).toBeUndefined(); // 251%3==1, MyUserName fires on 2, observes on 1 BUT still 250t of sleep
+    });
 });
