@@ -1,7 +1,11 @@
 **Screeps Simple-allies S1C**
-This was created for the S1C alliance, working with MadDokMike, SneakyPolarBear & Kalgen 
+This was created for the S1C alliance.
+Contributors: MadDokMike, Harabi SneakyPolarBear & Kalgen 
 This class is designed as an evolution of the original simple-allies code, found here:
 https://github.com/screepers/simpleAllies/blob/main/src/js/simpleAllies.js
+
+V0.2.0 Improvements/Changes:
+- added the ability to reset and remove requests without completely resetting your requests
 
 V0.1.0 Improvements/Changes:
 - It now keets a local stash of ally data, so you can read their requests on any tick, even if you can't see their segment
