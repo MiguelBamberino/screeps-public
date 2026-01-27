@@ -14,7 +14,7 @@ const EFunnelGoalType = {
 };
 
 /**
- * @version 0.2.0
+ * @version 0.3.0
  * @author MadDokMike - https://github.com/MiguelBamberino
  * @author Harabi - https://github.com/sy-harabi
  * @author SneakyPolarBear - https://github.com/ztomlord
@@ -110,6 +110,8 @@ class SimpleAllies {
                     }
                 }catch (e) {
                     this._log("ERROR", "simple-allies", "Error reading segment for Ally:"+username, 'parse-data')
+                    // wipe their cached requests
+                    this.allyRequests[username] = {requests:{},_parsedAt:Game.time};
                 }
             }else {
                 // for whatever reason, this ally has not published requests or wrote null/undefined/false to their segment
@@ -168,6 +170,7 @@ class SimpleAllies {
         if(!this.rawSegmentData[currentAllyUsername] || this.rawSegmentData[currentAllyUsername].data!==RawMemory.foreignSegment.data){
             this.rawSegmentData[currentAllyUsername] = { updatedAt:Game.time, data:RawMemory.foreignSegment.data};
             this._parsed = false;// reset the global parse check, so we know to review all ally data.
+            this._log("VERBOSE", "simple-allies", "Fresh data from Ally:"+currentAllyUsername, 'read-segment')
         }
         return OK;
 

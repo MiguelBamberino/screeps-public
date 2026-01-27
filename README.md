@@ -4,6 +4,10 @@ Contributors: MadDokMike, Harabi SneakyPolarBear & Kalgen
 This class is designed as an evolution of the original simple-allies code, found here:
 https://github.com/screepers/simpleAllies/blob/main/src/js/simpleAllies.js
 
+
+V0.3.0 Improvements/Changes:
+- improved caching and save JSON.parse() CPU, by invalidating cache by ally
+
 V0.2.0 Improvements/Changes:
 - added the ability to reset and remove requests without completely resetting your requests
 
