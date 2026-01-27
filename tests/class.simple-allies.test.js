@@ -1,6 +1,6 @@
 require('../src/class.simple-allies.js');
 const constants = require('@screeps/common/lib/constants');
-const {ERR_NOT_FOUND} = require("@screeps/common/lib/constants");
+const {ERR_NOT_FOUND, ERR_INVALID_ARGS} = require("@screeps/common/lib/constants");
 // Append each attribute from the module to the global scope
 Object.assign(global, constants);
 
@@ -51,7 +51,14 @@ describe('simple-allies.1 > initRun()',()=> {
             let AllyChat = new SimpleAllies([],90,'TestUserName');
             let res = AllyChat.initRun();
             expect(res).toBe(ERR_NOT_FOUND);
-        });
+    });
+    it('simple-allies.1.2 > Your own name in allies list ',()=>{
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','TestUserName','AllyB'],90,'TestUserName');
+        let res = AllyChat.initRun();
+        expect(res).toBe(ERR_INVALID_ARGS);
+    });
     it('simple-allies.1.2 > first tick, no foreignSegment. So set to ally[0] ',()=>{
         createFake_Game();
         createFake_RawMemory();
@@ -97,9 +104,9 @@ describe('simple-allies.1 > initRun()',()=> {
         expect(RawMemory._fake_setActiveForeignSegment_params).toEqual(['AllyA',90]);
 
         expect(AllyChat.rawSegmentData).toEqual({
-            'AllyA':'{ "requests": { "resources": [] } }',
-            'AllyB':'{ "requests": { "resources": [] } }',
-            'AllyC':'{ "requests": { "resources": [] } }',
+            'AllyA':{data:'{ "requests": { "resources": [] } }',updatedAt: 2},
+            'AllyB':{data:'{ "requests": { "resources": [] } }',updatedAt: 3},
+            'AllyC':{data:'{ "requests": { "resources": [] } }',updatedAt: 4},
         });
     });
     it('simple-allies.1.4 > one ally has no segment ',()=>{
@@ -140,9 +147,10 @@ describe('simple-allies.1 > initRun()',()=> {
         expect(RawMemory._fake_setActiveForeignSegment_params).toEqual(['AllyA',90]);
 
         expect(AllyChat.rawSegmentData).toEqual({
-            'AllyA':'{ "requests": { "resources": [] } }',
-            'AllyB':undefined,
-            'AllyC':'{ "requests": { "resources": [] } }',
+
+            // AllyB did not set a segment, so will be missing
+            'AllyA':{data:'{ "requests": { "resources": [] } }',updatedAt: 2},
+            'AllyC':{data:'{ "requests": { "resources": [] } }',updatedAt: 4},
         });
 
     });
@@ -155,7 +163,7 @@ describe('simple-allies.1 > initRun()',()=> {
         expect(res).toBe(ERR_TIRED);
         expect(RawMemory._fake_setActiveForeignSegment_params).toEqual(['AllyA',90]);
 
-        // Game tick over
+        // Tick 2 Game tick over
         Game.time++;
         RawMemory.foreignSegment={username:'AllyA',data:'{ "requests": { "resources": [] } }'};
 
@@ -164,7 +172,7 @@ describe('simple-allies.1 > initRun()',()=> {
         expect(res).toBe(OK);
         expect(RawMemory._fake_setActiveForeignSegment_params).toEqual(['AllyB',90]);
 
-        // Game tick over
+        // Tick 3 Game tick over
         Game.time++;
         RawMemory.foreignSegment={username:'AllyB',data:'{ "requests": { "resources": [] } }'};
 
@@ -173,7 +181,7 @@ describe('simple-allies.1 > initRun()',()=> {
         expect(res).toBe(OK);
         expect(RawMemory._fake_setActiveForeignSegment_params).toEqual(['AllyC',90]);
 
-        // Game tick over
+        // Tick 4 Game tick over
         Game.time++;
         RawMemory.foreignSegment={username:'AllyC',data:'{ "requests": { "resources": [] } }'};
 
@@ -182,7 +190,7 @@ describe('simple-allies.1 > initRun()',()=> {
         expect(res).toBe(OK);
         expect(RawMemory._fake_setActiveForeignSegment_params).toEqual(['AllyA',90]);
 
-        // Game tick over
+        // Tick 5 Game tick over
         Game.time++;
         RawMemory.foreignSegment={username:'AllyA',data:'{ "requests": { "defense": [{roomName:"W3N3"}] } }'};
 
@@ -191,16 +199,111 @@ describe('simple-allies.1 > initRun()',()=> {
         expect(RawMemory._fake_setActiveForeignSegment_params).toEqual(['AllyB',90]);
 
         expect(AllyChat.rawSegmentData).toEqual({
-            'AllyA':'{ "requests": { "defense": [{roomName:"W3N3"}] } }',
-            'AllyB':'{ "requests": { "resources": [] } }',
-            'AllyC':'{ "requests": { "resources": [] } }',
+            'AllyA':{data:'{ "requests": { "defense": [{roomName:"W3N3"}] } }',updatedAt: 5},
+            'AllyB':{data:'{ "requests": { "resources": [] } }',updatedAt: 3},
+            'AllyC':{data:'{ "requests": { "resources": [] } }',updatedAt: 4},
         });
     });
 });
+describe('simple-allies.2 > _parseRawData()',()=> {
+    it('simple-allies.2.1 > allyA sets on T2, allyB sets on T3,T5. Expect: AllyA is not reparsed. AllyB is reparsed ',()=>{
 
-describe('simple-allies.2 > _getRequestsByType()',()=> {
+        createFake_Game();
+        createFake_RawMemory();
+        let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'TestUserName');
 
-    it('simple-allies.2.1 > ally has set segment false/null/undefined. EXPECT: This ally is skipped. ',()=>{
+        // make sure this doesn't create a bug from being called too early
+        expect(AllyChat._parseRawData()).toBe(0);
+
+        // first tick, we're just assign the segment
+        AllyChat.initRun();
+
+        // make sure this doesn't create a bug from being called too early
+        expect(AllyChat._parseRawData()).toBe(0);
+
+        // Tick 2 - AllyA sets their data
+        Game.time++;
+        RawMemory.foreignSegment={username:'AllyA',data:'{ "requests": { "defense": [{"roomName":"W3N3"}] } }'};
+        AllyChat.initRun();
+
+        expect(AllyChat._parseRawData()).toBe(1);
+        expect(AllyChat.allyRequests).toEqual({
+            'AllyA':{
+                requests:{defense:[{roomName:"W3N3"}]},
+                _parsedAt: 2,
+            }
+        })
+
+        // Tick 3 - AllyB sets their data
+        Game.time++;
+        RawMemory.foreignSegment={username:'AllyB',data:'{ "requests": { "resource": [{"roomName":"W1N3","resourceType":"L"}] } }'};
+        AllyChat.initRun();
+
+        let res = AllyChat._parseRawData();
+        expect(res).toBe(1);
+        expect(AllyChat.allyRequests).toEqual({
+            'AllyA':{
+                requests:{defense:[{roomName:"W3N3"}]},
+                _parsedAt: 2,
+            },
+            'AllyB':{
+                requests:{resource:[{roomName:"W1N3",resourceType:"L"}]},
+                _parsedAt: 3,
+            }
+        })
+
+        // Tick 4 AllyA makes no change
+        Game.time++;
+        AllyChat.initRun();
+
+        expect(AllyChat._parseRawData()).toBe(0);
+        expect(AllyChat.allyRequests).toEqual({
+            'AllyA':{
+                requests:{defense:[{roomName:"W3N3"}]},
+                _parsedAt: 2,
+            },
+            'AllyB':{
+                requests:{resource:[{roomName:"W1N3",resourceType:"L"}]},
+                _parsedAt: 3,
+            }
+        })
+
+        // Tick 5 AllyB makes no change
+        Game.time++;
+        RawMemory.foreignSegment={username:'AllyB',data:'{ "requests": { "resource": [{"roomName":"W1N3","resourceType":"L"},{"roomName":"W1N3","resourceType":"O"}] } }'};
+        AllyChat.initRun();
+        expect(AllyChat._parseRawData()).toBe(1);
+        expect(AllyChat.allyRequests).toEqual({
+            'AllyA':{
+                requests:{defense:[{roomName:"W3N3"}]},
+                _parsedAt: 2,
+            },
+            'AllyB':{
+                requests:{resource:[{roomName:"W1N3",resourceType:"L"},{roomName:"W1N3",resourceType:"O"}]},
+                _parsedAt: 5,
+            }
+        })
+
+        // Tick 6, no change from any ally, expect cache is preserved
+        Game.time++;
+        AllyChat.initRun();
+
+        expect(AllyChat._parseRawData()).toBe(0);
+        expect(AllyChat.allyRequests).toEqual({
+            'AllyA':{
+                requests:{defense:[{roomName:"W3N3"}]},
+                _parsedAt: 2,
+            },
+            'AllyB':{
+                requests:{resource:[{roomName:"W1N3",resourceType:"L"},{roomName:"W1N3",resourceType:"O"}]},
+                _parsedAt: 5,
+            }
+        })
+    })
+})
+describe('simple-allies.3 > _getRequestsByType()',()=> {
+
+    it('simple-allies.3.1 > ally has set segment false/null/undefined. EXPECT: This ally is skipped. ',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB','AllyC','AllyD'],90,'TestUserName');
@@ -208,7 +311,7 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
         AllyChat.initRun();
         // Game tick over
         Game.time++;
-        RawMemory.foreignSegment={username:'AllyB',data:undefined};
+        RawMemory.foreignSegment={username:'AllyA',data:undefined};
         // next tick we can READ allyA and set pointer to allyB
         AllyChat.initRun();
         // Game tick over
@@ -229,7 +332,7 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
         let reqs = AllyChat._getRequestsByType('defense');
         expect(reqs).toEqual([{roomName:"W3N3",username:'AllyB'}]);
     });
-    it('simple-allies.2.2 > ally has set requests false/null/undefined. EXPECT: This ally is skipped. ',()=>{
+    it('simple-allies.3.2 > ally has set requests false/null/undefined. EXPECT: This ally is skipped. ',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB','AllyC','AllyD'],90,'TestUserName');
@@ -237,7 +340,7 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
         AllyChat.initRun();
         // Game tick over
         Game.time++;
-        RawMemory.foreignSegment={username:'AllyB',data:'{ "requests":undefined }'};
+        RawMemory.foreignSegment={username:'AllyA',data:'{ "requests":undefined }'};
         // next tick we can READ allyA and set pointer to allyB
         AllyChat.initRun();
         // Game tick over
@@ -258,7 +361,7 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
 
         expect(AllyChat._getRequestsByType('defense')).toEqual([{roomName:"W3N3",username:'AllyB'}]);
     });
-    it('simple-allies.2.3 > ally has set [funnel/barrage...] to bad data type. EXPECT: This ally is skipped. "  ',()=>{
+    it('simple-allies.3.3 > ally has set [funnel/barrage...] to bad data type. EXPECT: This ally is skipped. "  ',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB','AllyC','AllyD'],90,'TestUserName');
@@ -266,7 +369,7 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
         AllyChat.initRun();
         // Game tick over
         Game.time++;
-        RawMemory.foreignSegment={username:'AllyB',data:'{ "requests":{"defense":undefined} }'};
+        RawMemory.foreignSegment={username:'AllyA',data:'{ "requests":{"defense":undefined} }'};
         // next tick we can READ allyA and set pointer to allyB
         AllyChat.initRun();
         // Game tick over
@@ -287,7 +390,7 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
 
         expect(AllyChat._getRequestsByType('defense')).toEqual([{roomName:"W3N3",username:'AllyB'}]);
     });
-    it('simple-allies.2.4 > ally has set the request contents to bad data type. EXPECT: This request is skipped. "  ',()=>{
+    it('simple-allies.3.4 > ally has set the request contents to bad data type. EXPECT: This request is skipped. "  ',()=>{
 
         createFake_Game();
         createFake_RawMemory();
@@ -296,7 +399,7 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
         AllyChat.initRun();
         // Game tick over
         Game.time++;
-        RawMemory.foreignSegment={username:'AllyB',data:'{ "requests":{"defense":[undefined]} }'};
+        RawMemory.foreignSegment={username:'AllyA',data:'{ "requests":{"defense":[undefined]} }'};
         // next tick we can READ allyA and set pointer to allyB
         AllyChat.initRun();
         // Game tick over
@@ -319,7 +422,7 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
 
 
     });
-    it('simple-allies.2.5 > ally has set the segment to BAD JSON. EXPECT: This request is skipped. "',()=>{
+    it('simple-allies.3.5 > ally has set the segment to BAD JSON. EXPECT: This request is skipped. "',()=>{
 
         createFake_Game();
         createFake_RawMemory();
@@ -340,7 +443,7 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
         expect(AllyChat._getRequestsByType('defense')).toEqual([{roomName:"W3N3",username:'AllyB'}]);
 
     });
-    it('simple-allies.2.6 > ally has set "req type" empty array. EXPECT: [] " ',()=>{
+    it('simple-allies.3.6 > ally has set "req type" empty array. EXPECT: [] " ',()=>{
 
         createFake_Game();
         createFake_RawMemory();
@@ -361,7 +464,7 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
         expect(AllyChat._getRequestsByType('defense')).toEqual([]);
 
     });
-    it('simple-allies.2.7 > 2 allies set defense reqs, 1 ally attack req. Request defense. EXPECT: 1 array, with only defense',()=>{
+    it('simple-allies.3.7 > 2 allies set defense reqs, 1 ally attack req. Request defense. EXPECT: 1 array, with only defense',()=>{
 
         createFake_Game();
         createFake_RawMemory();
@@ -385,7 +488,7 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
         ]);
 
     });
-    it('simple-allies.2.8 > Ally changes  data. EXPECT: Correct Adds,Edits,Removes from cache.',()=>{
+    it('simple-allies.3.8 > Ally changes  data. EXPECT: Correct Adds,Edits,Removes from cache.',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'TestUserName');
@@ -419,18 +522,18 @@ describe('simple-allies.2 > _getRequestsByType()',()=> {
     });
 });
 
-describe('simple-allies.3 > getAllRequests()',()=> {
+describe('simple-allies.4 > getAllRequests()',()=> {
 
-    it.todo('simple-allies.3.1 > no segment data set. Expect: basic skeleton of keyed data. ');
-    it.todo('simple-allies.3.2 > mix of good & bad data. Expect: data, keyed by ally.');
-    it.todo('simple-allies.3.3 > Ally does not change data. Expect: parse to cache.');
-    it.todo('simple-allies.3.4 > Ally changes data on tick X, we access of tick X+3. Expect: changeTime=x, parseTime=x+3.');
-    it.todo('simple-allies.3.5 > Ally changes after we have parsed. Expect: New data & parseTime=x, changeTime=x . ');
+    it.todo('simple-allies.4.1 > no segment data set. Expect: basic skeleton of keyed data. ');
+    it.todo('simple-allies.4.2 > mix of good & bad data. Expect: data, keyed by ally.');
+    it.todo('simple-allies.4.3 > Ally does not change data. Expect: parse to cache.');
+    it.todo('simple-allies.4.4 > Ally changes data on tick X, we access of tick X+3. Expect: changeTime=x, parseTime=x+3.');
+    it.todo('simple-allies.4.5 > Ally changes after we have parsed. Expect: New data & parseTime=x, changeTime=x . ');
 });
 
-describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
+describe('simple-allies.5 > getOpenBarrageJobs()',()=> {
 
-    it('simple-allies.4.1 > No barrages set. Expect: {} ',()=>{
+    it('simple-allies.5.1 > No barrages set. Expect: {} ',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -449,7 +552,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(AllyChat.getOpenBarrageJobs()).toEqual({});
 
     });
-    it('simple-allies.4.2 > barrages set, then removed. Expect: {}',()=>{
+    it('simple-allies.5.2 > barrages set, then removed. Expect: {}',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -500,7 +603,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
 
 
     });
-    it('simple-allies.4.3 > 1 active Barrage, player not invited. Expect: {} ',()=>{
+    it('simple-allies.5.3 > 1 active Barrage, player not invited. Expect: {} ',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -528,7 +631,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(AllyChat.getOpenBarrageJobs()).toEqual({});
 
     });
-    it('simple-allies.4.4 > 1 active Barrage, player turn to act. Expect: {}',()=>{
+    it('simple-allies.5.4 > 1 active Barrage, player turn to act. Expect: {}',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -549,7 +652,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(AllyChat.getOpenBarrageJobs()).toEqual({});
 
     });
-    it('simple-allies.4.5 > 1 active Barrage, player turn to observe. Expect: request',()=>{
+    it('simple-allies.5.5 > 1 active Barrage, player turn to observe. Expect: request',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -571,7 +674,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(jobs['W2N3']).toBeDefined();
         expect(jobs['W2N3'].action).toBe('observe');
     });
-    it('simple-allies.4.6 > 1 active Barrage, player turn to launch. Expect: request',()=>{
+    it('simple-allies.5.6 > 1 active Barrage, player turn to launch. Expect: request',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -593,7 +696,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(jobs['W2N3']).toBeDefined();
         expect(jobs['W2N3'].action).toBe('decide-launch');
     });
-    it('simple-allies.4.7 > 2 active Barrage, player turn to act on one, not the other. Expect: 1 request',()=>{
+    it('simple-allies.5.7 > 2 active Barrage, player turn to act on one, not the other. Expect: 1 request',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -617,7 +720,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(jobs['W2N3']).toBeUndefined();
         expect(jobs['W1N3'].action).toBe('decide-launch');
     });
-    it('simple-allies.4.8 > 2 active Barrage, same room, player turn on 2nd, not 1st. Expect: NO request. Completely ignore duplicate nuke requests.',()=>{
+    it('simple-allies.5.8 > 2 active Barrage, same room, player turn on 2nd, not 1st. Expect: NO request. Completely ignore duplicate nuke requests.',()=>{
         // Kalgen's test case
         createFake_Game();
         createFake_RawMemory();
@@ -640,7 +743,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         let jobs = AllyChat.getOpenBarrageJobs();
         expect(jobs['W1N3']).toBeUndefined();// we should not activate on 2nd request, as it was accepted in error
     });
-    it('simple-allies.4.9 > 2 active Barrage, same room, player turn on both. Expect: 1st. Ignore 2nd (duplicate).',()=>{
+    it('simple-allies.5.9 > 2 active Barrage, same room, player turn on both. Expect: 1st. Ignore 2nd (duplicate).',()=>{
         // Kalgen's test case
         createFake_Game();
         createFake_RawMemory();
@@ -664,7 +767,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(jobs['W1N3']).toBeDefined();
         expect(jobs['W1N3'].maxNukes).toBe(2);// we should activate on 1st request, as it was accepted in error
     });
-    it('simple-allies.4.10 > 1 active Barrage, Player with LS=0. Expect: Player gets observer-slot=slots.length.',()=>{
+    it('simple-allies.5.10 > 1 active Barrage, Player with LS=0. Expect: Player gets observer-slot=slots.length.',()=>{
             createFake_Game();
             createFake_RawMemory();
             let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -686,7 +789,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
             expect(jobs['W1N3']).toBeDefined();
             expect(jobs['W1N3'].action).toBe("observe");
     });
-    it('simple-allies.4.11 > Complicated logic stress test. Expect: Player to only get a row on correct turn.',()=>{
+    it('simple-allies.5.11 > Complicated logic stress test. Expect: Player to only get a row on correct turn.',()=>{
         // ergh, this ones going to be a PITA
         createFake_Game();
         createFake_RawMemory();
@@ -757,7 +860,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
 
 
     });
-    it('simple-allies.4.12 > Barrages with startTick >= Game.time Expect: request is ignored.',()=>{
+    it('simple-allies.5.12 > Barrages with startTick >= Game.time Expect: request is ignored.',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -782,7 +885,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(jobs['W2N3']).toBeDefined();
         expect(jobs['W3N3']).toBeUndefined();
     });
-    it('simple-allies.4.13 > Barrages with !startTick,  !maxNukes, !interval, !modVal, !launchSlots Expect: Assumed defaults.',()=>{
+    it('simple-allies.5.13 > Barrages with !startTick,  !maxNukes, !interval, !modVal, !launchSlots Expect: Assumed defaults.',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -808,7 +911,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(jobs['W1N3'].modVal).toBe(3);
         expect(jobs['W1N3'].action).toBe('decide-launch');
     });
-    it('simple-allies.4.14 > Barrages with !launchSlots Expect: request is ignored. launchSlots CANNOT be rebuilt on client-side',()=>{
+    it('simple-allies.5.14 > Barrages with !launchSlots Expect: request is ignored. launchSlots CANNOT be rebuilt on client-side',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -832,7 +935,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(jobs['W2N3']).toBeDefined();
         expect(jobs['W2N3'].maxNukes).toBe(2);
     });
-    it('simple-allies.4.15 > Barrages with !roomName Expect: request is ignored...obv',()=>{
+    it('simple-allies.5.15 > Barrages with !roomName Expect: request is ignored...obv',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -857,7 +960,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(jobs['W1N3'].maxNukes).toBe(2);
     });
 
-    it('simple-allies.4.16 > Barrages with modVal!=launchSlots.length Expect: Ignored and launchSlots.length is used',()=>{
+    it('simple-allies.5.16 > Barrages with modVal!=launchSlots.length Expect: Ignored and launchSlots.length is used',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -882,7 +985,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(jobs['W1N3'].action).toBe("decide-launch");
         expect(jobs['W1N3'].maxNukes).toBe(2);
     });
-    it('simple-allies.4.17 > You request your own barrage,  Expect: You must be included in the launch slots and nuke jobs',()=>{
+    it('simple-allies.5.17 > You request your own barrage,  Expect: You must be included in the launch slots and nuke jobs',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');
@@ -926,7 +1029,7 @@ describe('simple-allies.4 > getOpenBarrageJobs()',()=> {
         expect(jobs['W2N1'].maxNukes).toBe(999);
     });
 
-    it('simple-allies.4.18 > using sleepBarrageRequest(),  Expect: The job to stay dormant until its time',()=>{
+    it('simple-allies.5.18 > using sleepBarrageRequest(),  Expect: The job to stay dormant until its time',()=>{
         createFake_Game();
         createFake_RawMemory();
         let AllyChat = new SimpleAllies(['AllyA','AllyB'],90,'MyUserName');

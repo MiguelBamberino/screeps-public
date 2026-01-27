@@ -101,24 +101,30 @@ class SimpleAllies {
 
     _parseRawData(){
 
-        if(this._parsed )return;
+        if(this._parsed )return 0;
+        let parsedCount = 0;
         for(let username in this.rawSegmentData){
             let data = this.rawSegmentData[username];
-            if(data){
+            if(data && data.data){
                 try{
-                    if(!this.allyRequests[username] || !this.allyRequests[username]._parsedAt || this.allyRequests[username]._parsedAt < this.rawSegmentData[username].updatedAt )
-                    // Protect from errors as we try to get ally segment data
-                    this.allyRequests[username] = JSON.parse(data);
-                    this.allyRequests[username]._parsedAt = Game.time;
+                    if(this.allyRequests[username]===undefined || this.allyRequests[username]._parsedAt < this.rawSegmentData[username].updatedAt ){
+                        // Protect from errors as we try to get ally segment data
+                        this.allyRequests[username] = JSON.parse(data.data);
+                        this.allyRequests[username]._parsedAt = Game.time;
+                        parsedCount++;
+                    }
                 }catch (e) {
                     this._log("ERROR", "simple-allies", "Error reading segment for Ally:"+username, 'parse-data')
                 }
-            }else if(this.allyRequests[username]){
-                // this ally had data, then wiped their segment
-                this.allyRequests[username] = { requests: {},parsedAt:Game.time};
+            }else {
+                // for whatever reason, this ally has not published requests or wrote null/undefined/false to their segment
+                // We must assume this means, they no longer want anything hidden
+                this._log("VERBOSE", "simple-allies", "No data for Ally:"+username, 'parse-data')
+                this.allyRequests[username] = {requests:{},_parsedAt:Game.time};
             }
         }
         this._parsed = true;
+        return parsedCount;
     }
     /**
      * Read current foreignSegment & move pointer for next read
