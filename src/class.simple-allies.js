@@ -78,9 +78,6 @@ class SimpleAllies {
      * Carries out memory & cache management. ~0.009 CPU/tick
      */
     initRun() {
-        this._parsed = false;
-
-
 
         // to save CPU, we won't write out to the segment, unless forced
         this._updateMySegment = this._writeMyRequestsEveryTick;
@@ -109,11 +106,16 @@ class SimpleAllies {
             let data = this.rawSegmentData[username];
             if(data){
                 try{
+                    if(!this.allyRequests[username] || !this.allyRequests[username]._parsedAt || this.allyRequests[username]._parsedAt < this.rawSegmentData[username].updatedAt )
                     // Protect from errors as we try to get ally segment data
                     this.allyRequests[username] = JSON.parse(data);
+                    this.allyRequests[username]._parsedAt = Game.time;
                 }catch (e) {
                     this._log("ERROR", "simple-allies", "Error reading segment for Ally:"+username, 'parse-data')
                 }
+            }else if(this.allyRequests[username]){
+                // this ally had data, then wiped their segment
+                this.allyRequests[username] = { requests: {},parsedAt:Game.time};
             }
         }
         this._parsed = true;
@@ -162,7 +164,10 @@ class SimpleAllies {
             return ERR_NOT_FOUND;
         }
         // just load in ally's string data. We'll JSON.parse it later, when we're ready
-        this.rawSegmentData[currentAllyUsername] = RawMemory.foreignSegment.data;
+        if(!this.rawSegmentData[currentAllyUsername] || this.rawSegmentData[currentAllyUsername].data!==RawMemory.foreignSegment.data){
+            this.rawSegmentData[currentAllyUsername] = { updatedAt:Game.time, data:RawMemory.foreignSegment.data};
+            this._parsed = false;// reset the global parse check, so we know to review all ally data.
+        }
         return OK;
 
     }

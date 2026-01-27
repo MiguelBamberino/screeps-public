@@ -42,8 +42,6 @@ AllyChat.initRun();
                 console.log("ERROR!! Observing ",roomName," for barrage request from ",req.username);
             }
         }
-
-
     }
 
 
