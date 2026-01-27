@@ -13,10 +13,10 @@ if (removedCount > 0) {
     console.log(`Removed ${removedCount} resource request(s) for E5N1`);
 }
 
-// Example 2: Remove all barrage requests from a specific username
-let removedBarrageCount = AllyChat.removeRequests('barrage', (req) => req.username === 'Bob');
+// Example 2: Remove all barrage requests for room E5N1
+let removedBarrageCount = AllyChat.removeRequests('barrage', (req) => req.roomName === 'E5N1');
 if (removedBarrageCount > 0) {
-    console.log(`Removed ${removedBarrageCount} barrage request(s) from Bob`);
+    console.log(`Removed ${removedBarrageCount} barrage request(s) for E5N1`);
 }
 
 // Example 3: Reset all requests of a specific type
