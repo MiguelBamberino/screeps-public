@@ -14,17 +14,12 @@ const EFunnelGoalType = {
 };
 
 /**
- * This class is designed as an evolution of the original simple-allies code, found here:
- * https://github.com/screepers/simpleAllies/blob/main/src/js/simpleAllies.js
+ * @version 0.2.0
+ * @author MadDokMike - https://github.com/MiguelBamberino
+ * @author Harabi - https://github.com/sy-harabi
+ * @author SneakyPolarBear - https://github.com/ztomlord
+ * @author Kalgen -
  *
- * I've added:
- * - local stashing of all ally data, so that you can access Ally requests when you can't see their segment
- * - CPU improvements, by on storing raw string data and parsing JSON on demand.
- * - added requestBarrage(), working with SneakyPolarBear & Kalgen
- * - added player synced nuke launches, using requestBarrage() + getOpenBarrageJobs()
- * - Added read wrappers for making it easier for player bots to access/filter what they want to read
- * - added log support, for player bots to hook their logger in. Instead of console.log()
- * - Error handling method changed to screeps style ERR_* and log LEVEL=ERROR, so player bots are not crashed from miss-use
  */
 class SimpleAllies {
 
