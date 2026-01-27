@@ -465,6 +465,41 @@ class SimpleAllies {
     requestRoom(args) {
         this._setRequestByType("room",args);
     }
+
+    /**
+     * Remove requests of a given type that match a predicate from this.myRequests.
+     * @param {string} type - the request type to filter (e.g. 'barrage', 'resource')
+     * @param {function} predicate - function(request) => boolean. Requests for which the predicate returns true will be removed.
+     * @returns {number|undefined} number of removed items, or ERR_INVALID_ARGS if predicate is not a function
+     */
+    removeRequests(type, predicate) {
+      if (!type) return
+      if (!this.myRequests[type]) return 0
+      if (typeof predicate !== "function") {
+        this._log("ERROR", "simple-allies", "predicate must be a function", "remove-requests")
+        return ERR_INVALID_ARGS
+      }
+      const before = this.myRequests[type].length
+      this.myRequests[type] = this.myRequests[type].filter(r => !predicate(r))
+      const after = this.myRequests[type].length
+      if (after === 0) delete this.myRequests[type]
+      this._updateMySegment = true
+      return before - after
+    }
+
+    /**
+     * Reset requests. Call with a specific type to clear that type, or with 'all' (or no arg) to clear all your requests.
+     * @param {string} [type] - request type to clear, or 'all' to clear everything.
+     */
+    resetRequests(type) {
+      if (type === undefined || type === "all") {
+        this.myRequests = {}
+      } else {
+        delete this.myRequests[type]
+      }
+      this._updateMySegment = true
+    }
+
     _setRequestByType(type,args){
         this._updateMySegment=true;// make sure we push updates to the segment memory
         if(this.myRequests[type]===undefined)this.myRequests[type]=[];
